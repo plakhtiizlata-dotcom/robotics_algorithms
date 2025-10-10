@@ -1,7 +1,7 @@
 # Встановлення
 
 Встановіть virtual environment:
-
+н
 ```bash
 python3 -m venv venv
 source ./venv/bin/activate
