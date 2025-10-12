@@ -8,7 +8,6 @@ except ImportError:
     import gym
 
 
-# Action constants.
 UP, RIGHT, DOWN, LEFT = 0, 1, 2, 3
 
 def play_episode(env, policy_iteration, render=False, iter_max=1000):
@@ -29,10 +28,6 @@ def play_episode(env, policy_iteration, render=False, iter_max=1000):
     return total_reward
 
 
-#######################################################
-### Task: Implement Policy Iteration algorithm.     ###
-### Завдання: Імплементувати ітерацію стратегіями   ###
-#######################################################
 class PolicyIteration:
     def __init__(self, transition_probs, states, actions):
         self.transition_probs = transition_probs
@@ -41,29 +36,61 @@ class PolicyIteration:
         self.policy = np.ones([len(self.states), len(self.actions)]) / len(self.actions)
 
     def pick_action(self, obs):
-        ### Using a policy pick an action for the state `obs`
-        ### Використовуючи стратегію обрати дію для стану `obs`
         return np.argmax(self.policy[obs])
 
-
     def run(self):
-        ### Using `self.transition_probs`, `self.states`, and `self.actions`, compute a policy.
-        ### Викорстовуючи `self.transition_probs`, `self.states` та `self.actions`, обчисліть стратегію.
-        
-        ### Зверніть увагу: | Note:
-        ### [(prob, next_state, reward, terminate), ...] = transition_probability[state][action]
-        ### prob = probability(next_state | state, action)
         theta = 0.001
         discount = 0.95
 
-        # policy evaluation
         def policy_evaluation(policy):
             value_function = np.zeros(len(self.states))
+            while True:
+                delta = 0
+                for state in self.states:
+                    v = value_function[state]
+                    new_v = 0
+                    for action in self.actions:
+                        action_prob = policy[state][action]
+                        action_value = 0
+                        for prob, next_state, reward, done in self.transition_probs[state][action]:
+                            if done:
+                                action_value += prob * reward
+                            else:
+                                action_value += prob * (reward + discount * value_function[next_state])
+                        new_v += action_prob * action_value
+                    value_function[state] = new_v
+                    delta = max(delta, abs(v - new_v))
+                if delta < theta:
+                    break
             return value_function
-    
-        # policy improvement
+
         while True:
-            pass
+            value_function = policy_evaluation(self.policy)
+            
+            policy_stable = True
+            for state in self.states:
+                old_action = np.argmax(self.policy[state])
+                
+                action_values = np.zeros(len(self.actions))
+                for action in self.actions:
+                    action_value = 0
+                    for prob, next_state, reward, done in self.transition_probs[state][action]:
+                        if done:
+                            action_value += prob * reward
+                        else:
+                            action_value += prob * (reward + discount * value_function[next_state])
+                    action_values[action] = action_value
+                
+                best_action = np.argmax(action_values)
+                
+                self.policy[state] = np.zeros(len(self.actions))
+                self.policy[state][best_action] = 1.0
+                
+                if old_action != best_action:
+                    policy_stable = False
+            
+            if policy_stable:
+                break
 
 
 def task(env_name):

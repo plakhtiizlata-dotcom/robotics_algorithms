@@ -22,14 +22,17 @@ def forward_kinematics(arm: RoboticArm, angles=None):
     link_lengths = np.array(arm.link_lengths)
     if angles is None:
         angles = np.array(arm.get_angles())
-    # Знайти:
-    end_effector_position = None
+    
+    cumulative_angles = np.cumsum(angles)
+    
+
+    dx = link_lengths * np.cos(cumulative_angles)
+    dy = link_lengths * np.sin(cumulative_angles)
+    
+    end_effector_position = base_position + np.array([np.sum(dx), np.sum(dy)])
 
     ############################################################
     ############################################################
-
-    if end_effector_position is None:
-        end_effector_position = np.array([3., 3.])
         
     return end_effector_position[:2]
 
@@ -112,3 +115,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Keyboard interrupt. Terminating...")
     pygame.quit()
+
+    

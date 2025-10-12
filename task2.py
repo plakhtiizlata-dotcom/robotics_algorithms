@@ -22,14 +22,51 @@ MAX_SPEED = np.deg2rad(1.0)
 # EN: Your code for IK and drawing goes here.                                         #
 
 def forward_kinematics(arm: RoboticArm, angles=None):
-    return np.array([3., 3.])
+    if angles is None:
+        angles = arm.get_angles()
+    
+    link_lengths = arm.link_lengths
+    p0 = arm.p0
+    
+    cumsum_angles = np.cumsum(angles)
+    
+    end_x = p0[0] + np.sum(link_lengths * np.cos(cumsum_angles))
+    end_y = p0[1] + np.sum(link_lengths * np.sin(cumsum_angles))
+    
+    return np.array([end_x, end_y])
 
 def jacobian(link_lengths, link_angles):
-    jacobian_matrix = np.zeros((2, len(link_angles)))
+    n = len(link_angles)
+    jacobian_matrix = np.zeros((2, n))
+    
+    cumsum_angles = np.cumsum(link_angles)
+    
+    for j in range(n):
+        jacobian_matrix[0, j] = -np.sum(link_lengths[j:] * np.sin(cumsum_angles[j:]))
+        jacobian_matrix[1, j] = np.sum(link_lengths[j:] * np.cos(cumsum_angles[j:]))
+    
     return jacobian_matrix
 
-def inverse_kinematics(target_position, arm):
-    angles = arm.get_angles()
+def inverse_kinematics(target_position, arm, max_iterations=50, tolerance=0.01, alpha=0.5):
+    angles = arm.get_angles().copy()
+    
+    for iteration in range(max_iterations):
+        current_pos = forward_kinematics(arm, angles)
+        
+        error = target_position - current_pos
+        
+        error_norm = np.linalg.norm(error)
+        if error_norm < tolerance:
+            break
+        
+        J = jacobian(arm.link_lengths, angles)
+        
+        J_pinv = np.linalg.pinv(J)
+        
+        delta_angles = alpha * (J_pinv @ error)
+        
+        angles = angles + delta_angles
+    
     return angles
 
 #######################################################################################
@@ -48,13 +85,11 @@ if __name__ == "__main__":
         joint_radius=0.3,
         joint_color=Color(200, 200, 200, 255),
     )
-    controller = ArmController(arm, max_velocity=MAX_SPEED)
     arm.start_drawing()
 
     ### <UA>
     ### drawing1 це список масивів точок. Кожен масив описує фігуру для малювання.
     ### Кожна фігура малюється окремо. Не повинно бути ліній, які зʼєднують дві фігури.
-    ### Кожна фігура це масив точок, які повинні бути намальовані в прямому порядку.
     ### <EN>
     ### drawing1 is a list of arrays of points. Each array describes a shape to draw.
     ### Each shape must be plotted separately. No line must connect two shapes.
@@ -64,6 +99,12 @@ if __name__ == "__main__":
     running = True
     i_shape = 0
     i_point = 0
+    
+    num_line_steps = 10
+    line_interpolation = []
+    current_line_step = 0
+    moving_to_start = False
+    
     try:
         while running:
             # Check the event queue
@@ -84,6 +125,51 @@ if __name__ == "__main__":
             # Hint: see arm_controller interface, use `controller`
             # controller.move_to_angles([your predicted angles])
             drawing = drawing2
+
+            if len(line_interpolation) == 0:
+                if i_shape < len(drawing):
+                    current_shape = drawing[i_shape]
+                    
+                    if i_point < len(current_shape):
+                        target_pos = current_shape[i_point]
+                        
+                        if i_point == 0:
+                            moving_to_start = True
+                            arm.stop_drawing()
+                            
+                            target_angles = inverse_kinematics(target_pos, arm)
+                            arm.set_angles(target_angles)
+                            
+                            arm.start_drawing()
+                            moving_to_start = False
+                            i_point += 1
+                        else:
+                            start_pos = current_shape[i_point - 1]
+                            
+                            line_interpolation = []
+                            for alpha in np.linspace(0, 1, num_line_steps):
+                                interp_pos = start_pos * (1 - alpha) + target_pos * alpha
+                                line_interpolation.append(interp_pos)
+                            
+                            current_line_step = 0
+                            i_point += 1
+                    else:
+                        arm.stop_drawing()
+                        i_shape += 1
+                        i_point = 0
+            
+            if len(line_interpolation) > 0 and not moving_to_start:
+                interp_target = line_interpolation[current_line_step]
+                
+                target_angles = inverse_kinematics(interp_target, arm)
+                
+                arm.set_angles(target_angles)
+                
+                arm.draw()
+                
+                current_line_step += 1
+                if current_line_step >= len(line_interpolation):
+                    line_interpolation = []
 
             #######################################################################################
             #######################################################################################
